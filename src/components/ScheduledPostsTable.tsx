@@ -11,6 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { PostAnalytics } from '@/components/PostAnalytics';
 
 interface ScheduledPost {
   id: string;
@@ -575,6 +576,11 @@ export function ScheduledPostsTable({ posts, onCancelPost, isCancelling, onSched
                     ))}
                   </div>
                 </div>
+              )}
+
+              {/* Add analytics for published posts */}
+              {previewPost?.status === 'published' && previewPost.publishedEventId && (
+                <PostAnalytics eventId={previewPost.publishedEventId} />
               )}
 
               {previewPost?.error && (
