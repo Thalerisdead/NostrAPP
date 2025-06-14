@@ -84,10 +84,11 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton disabled>
-                    <User />
-                    <span>Profile</span>
-                    <span className="ml-auto text-xs text-muted-foreground">Soon</span>
+                  <SidebarMenuButton asChild isActive={location.pathname === '/profile'}>
+                    <Link to="/profile">
+                      <User />
+                      <span>Profile</span>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
