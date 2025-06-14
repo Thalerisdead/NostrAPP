@@ -121,5 +121,7 @@ export function useScheduledPosts() {
     },
     enabled: !!user,
     retry: 3,
+    refetchInterval: 10000, // Refetch every 10 seconds to keep UI in sync
+    refetchIntervalInBackground: true, // Keep refreshing even when tab is in background
   });
 } 

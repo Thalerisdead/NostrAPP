@@ -8,10 +8,8 @@ export interface ScheduledPostEvent {
   targetKind: number;
   images?: string[];
   event: NostrEvent;
+  title?: string;
 }
-
-// Global set to track posts being published across all scheduler instances
-const globalPublishingPosts = new Set<string>();
 
 export class PostScheduler {
   private timers = new Map<string, NodeJS.Timeout>();
@@ -19,98 +17,93 @@ export class PostScheduler {
   private checkInterval: NodeJS.Timeout | null = null;
   private scheduledPosts: ScheduledPostEvent[] = [];
   private publishingPosts = new Set<string>(); // Track posts currently being published
+  private instanceId: number;
 
   constructor(
     private user: NUser,
     private publishEvent: (event: Partial<NostrEvent>) => Promise<NostrEvent>,
-    private updateScheduledPost: (data: { id: string; status: 'published' | 'failed'; publishedEventId?: string; error?: string; publishAt?: Date; targetKind?: number; createdAt?: Date }) => Promise<void>
-  ) {}
-
-  start() {
-    if (this.isRunning) return;
-    
-    this.isRunning = true;
-    
-    // Clear any leftover state from previous sessions
-    this.clearStaleState();
-    
-    // Check for posts to publish every 30 seconds for better responsiveness
-    this.checkInterval = setInterval(() => {
-      this.checkForPostsToPublish();
-    }, 30000);
-    
-    // Also check immediately when starting
-    this.checkForPostsToPublish();
-    
-    console.log('Post scheduler started');
+    private updateScheduledPost: (data: { id: string; status: 'published' | 'failed'; publishedEventId?: string; error?: string; publishAt?: Date; targetKind?: number; createdAt?: Date; title?: string }) => Promise<void>
+  ) {
+    this.instanceId = ++schedulerInstanceCount;
+    console.log(`[SCHEDULER_CREATE] Created scheduler instance #${this.instanceId} for user ${user.pubkey.slice(0, 8)}`);
   }
 
-  private clearStaleState() {
-    // Clear all existing timers
-    this.timers.forEach(timer => clearTimeout(timer));
-    this.timers.clear();
-    
-    // Clear publishing state only for this instance
-    this.publishingPosts.clear();
-    
-    // Clear global publishing state only after 5 minutes to prevent immediate re-publishing
-    setTimeout(() => {
-      console.log('Clearing global publishing state after delay');
-      globalPublishingPosts.clear();
-    }, 5 * 60 * 1000);
-    
-    console.log('Cleared stale scheduler state');
+  start() {
+    if (this.isRunning) {
+      console.log(`[SCHEDULER_ALREADY_RUNNING] Scheduler instance #${this.instanceId} is already running`);
+      return;
+    }
+
+    this.isRunning = true;
+    console.log(`[SCHEDULER_START] Starting scheduler instance #${this.instanceId} for user ${this.user.pubkey.slice(0, 8)}`);
+
+    // Start periodic checking every 30 seconds
+    this.checkInterval = setInterval(() => {
+      this.checkForPostsToPublish();
+    }, 30 * 1000);
+
+    console.log(`[SCHEDULER_STARTED] Scheduler instance #${this.instanceId} started`);
   }
 
   stop() {
     if (!this.isRunning) return;
     
+    console.log(`[SCHEDULER_STOP] Stopping scheduler instance #${this.instanceId}`);
+    
     this.isRunning = false;
     
-    // Clear all timers
-    this.timers.forEach(timer => clearTimeout(timer));
-    this.timers.clear();
-    
-    // Clear check interval
+    // Clear the check interval
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
       this.checkInterval = null;
     }
     
-    // Clear publishing state
+    // Clear all timers
+    for (const timer of this.timers.values()) {
+      clearTimeout(timer);
+    }
+    this.timers.clear();
+    
+    // Clear publishing set
     this.publishingPosts.clear();
     
-    console.log('Post scheduler stopped');
+    console.log(`[SCHEDULER_STOPPED] Scheduler instance #${this.instanceId} stopped`);
   }
 
   schedulePost(scheduledPost: ScheduledPostEvent) {
+    // Clear any existing timer for this post
+    this.unschedulePost(scheduledPost.id);
+    
     const now = Date.now();
     const publishTime = scheduledPost.publishAt.getTime();
+    const delay = publishTime - now;
     
-    // If the post should have been published already, publish it immediately
-    if (publishTime <= now) {
+    console.log(`[SCHEDULE_POST] Instance #${this.instanceId}: Scheduling post ${scheduledPost.id} with delay ${delay}ms`);
+    
+    if (delay <= 0) {
+      // Post should be published immediately
+      console.log(`[SCHEDULE_IMMEDIATE] Instance #${this.instanceId}: Publishing post ${scheduledPost.id} immediately (overdue)`);
       this.publishPost(scheduledPost);
       return;
     }
     
-    // Schedule the post for the future
-    const delay = publishTime - now;
-    
-    // Clear any existing timer for this post
-    const existingTimer = this.timers.get(scheduledPost.id);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-    }
-    
-    // Set new timer
+    // Set new timer with safety check
     const timer = setTimeout(() => {
-      this.publishPost(scheduledPost);
+      console.log(`[TIMER_FIRE] Instance #${this.instanceId}: Timer fired for post ${scheduledPost.id}`);
+      // Double-check that the post still exists before publishing
+      const stillExists = this.scheduledPosts.some(p => p.id === scheduledPost.id);
+      if (stillExists) {
+        console.log(`[TIMER_PUBLISH] Instance #${this.instanceId}: Post ${scheduledPost.id} still exists, calling publishPost`);
+        this.publishPost(scheduledPost);
+      } else {
+        console.log(`[TIMER_SKIP] Instance #${this.instanceId}: Post ${scheduledPost.id} no longer exists, skipping`);
+      }
       this.timers.delete(scheduledPost.id);
     }, delay);
     
     this.timers.set(scheduledPost.id, timer);
     
-    console.log(`Scheduled post ${scheduledPost.id} to publish at ${scheduledPost.publishAt.toISOString()}`);
+    console.log(`[SCHEDULE_TIMER] Instance #${this.instanceId}: Scheduled post ${scheduledPost.id} to publish at ${scheduledPost.publishAt.toISOString()}`);
   }
 
   unschedulePost(id: string) {
@@ -123,63 +116,68 @@ export class PostScheduler {
   }
 
   private async publishPost(scheduledPost: ScheduledPostEvent) {
-    const postId = scheduledPost.id;
-    
-    // CRITICAL: Check if this post was already published successfully
-    // This prevents the same post from being published multiple times
-    if (globalPublishingPosts.has(postId)) {
-      console.log(`Post ${postId} is already being processed globally, skipping`);
+    // Global deduplication check - first line of defense
+    if (isRecentlyPublished(scheduledPost.id)) {
+      console.log(`[GLOBAL_BLOCKED] Blocking duplicate publish attempt for post ${scheduledPost.id}`);
       return;
     }
-    
-    if (this.publishingPosts.has(postId)) {
-      console.log(`Post ${postId} is already being processed locally, skipping`);
+
+    // Safety check: ensure this post isn't already being published
+    if (this.publishingPosts.has(scheduledPost.id)) {
+      console.log(`[DUPLICATE] Post ${scheduledPost.id} is already being published - ignoring duplicate request`);
       return;
     }
+
+    // Safety check: ensure this post hasn't already been published
+    const postIndex = this.scheduledPosts.findIndex(p => p.id === scheduledPost.id);
+    if (postIndex === -1) {
+      console.log(`[ALREADY_PUBLISHED] Post ${scheduledPost.id} not found in scheduled posts - already published or removed`);
+      return;
+    }
+
+    console.log(`[PUBLISHING] Instance #${this.instanceId}: Starting to publish post ${scheduledPost.id}`);
+
+    // Mark as being published globally
+    markAsPublished(scheduledPost.id);
+
+    // Add to publishing set to prevent duplicates
+    this.publishingPosts.add(scheduledPost.id);
+
+    // Remove the post from scheduled posts immediately to prevent double publishing
+    this.scheduledPosts.splice(postIndex, 1);
     
-    // Mark as being published IMMEDIATELY to prevent race conditions
-    globalPublishingPosts.add(postId);
-    this.publishingPosts.add(postId);
-    
-    // Remove from scheduled list IMMEDIATELY so it won't be picked up again
-    this.scheduledPosts = this.scheduledPosts.filter(p => p.id !== postId);
-    
-    // Clear any timer for this post
-    const timer = this.timers.get(postId);
+    // Clear any existing timer for this post
+    const timer = this.timers.get(scheduledPost.id);
     if (timer) {
       clearTimeout(timer);
-      this.timers.delete(postId);
+      this.timers.delete(scheduledPost.id);
     }
-    
-    console.log(`Starting to publish post ${postId}`);
-    
+
     try {
-      console.log(`Publishing scheduled post ${scheduledPost.id}`);
-      
-      // Prepare content with images appended
-      let content = scheduledPost.content;
+      // Prepare content and tags for the published event
+      let finalContent = scheduledPost.content;
       const tags: string[][] = [];
       
-      // Add images to content and create imeta tags
+      // Add images to content and create imeta tags if any
       if (scheduledPost.images && scheduledPost.images.length > 0) {
-        console.log(`Adding ${scheduledPost.images.length} images to post ${scheduledPost.id}`);
+        // Add images to the end of the content
+        finalContent = scheduledPost.content + '\n\n' + scheduledPost.images.join('\n');
         
-        // Append image URLs to content
-        const imageUrls = scheduledPost.images.join('\n\n');
-        content = scheduledPost.content + (scheduledPost.content ? '\n\n' : '') + imageUrls;
-        
-        // Create imeta tags for each image
+        // Create imeta tags for each image (NIP-92)
         scheduledPost.images.forEach(imageUrl => {
           tags.push(['imeta', `url ${imageUrl}`]);
         });
       }
       
       // Create the actual post event
+      console.log(`[PUBLISH_EVENT] Instance #${this.instanceId}: Creating Nostr event for post ${scheduledPost.id}`);
       const publishedEvent = await this.publishEvent({
         kind: scheduledPost.targetKind,
-        content,
+        content: finalContent,
         tags: tags.length > 0 ? tags : undefined,
       });
+      
+      console.log(`[PUBLISH_SUCCESS] Instance #${this.instanceId}: Published Nostr event ${publishedEvent.id} for post ${scheduledPost.id}`);
       
       // Update the scheduled post status to published
       await this.updateScheduledPost({
@@ -189,12 +187,13 @@ export class PostScheduler {
         publishAt: scheduledPost.publishAt,
         targetKind: scheduledPost.targetKind,
         createdAt: new Date(), // Use current time for created_at of the status update
+        title: scheduledPost.title,
       });
       
-      console.log(`Successfully published scheduled post ${scheduledPost.id} as event ${publishedEvent.id}`);
+      console.log(`[COMPLETE] Instance #${this.instanceId}: Successfully published scheduled post ${scheduledPost.id} as event ${publishedEvent.id}`);
       
     } catch (error) {
-      console.error(`Failed to publish scheduled post ${scheduledPost.id}:`, error);
+      console.error(`[ERROR] Instance #${this.instanceId}: Failed to publish scheduled post ${scheduledPost.id}:`, error);
       
       // Update the scheduled post status to failed
       await this.updateScheduledPost({
@@ -204,16 +203,20 @@ export class PostScheduler {
         publishAt: scheduledPost.publishAt,
         targetKind: scheduledPost.targetKind,
         createdAt: new Date(), // Use current time for created_at of the status update
+        title: scheduledPost.title,
       });
       
-      // Don't retry failed posts automatically to prevent duplicates
-      console.log(`Post ${scheduledPost.id} failed and will not be retried automatically`);
+      // Retry after 5 minutes - but only if the post hasn't been published by another mechanism
+      setTimeout(() => {
+        // Don't retry if it's already been processed
+        if (!this.publishingPosts.has(scheduledPost.id)) {
+          console.log(`[RETRY_EXECUTE] Instance #${this.instanceId}: Retrying failed post ${scheduledPost.id}`);
+          this.publishPost(scheduledPost);
+        }
+      }, 5 * 60 * 1000);
     } finally {
-      // IMPORTANT: Do NOT remove from global/local sets here
-      // This would allow the same post to be published again
-      // Only remove when the scheduler is reset or after a long delay
-      
-      console.log(`Finished processing post ${postId} - keeping in published set to prevent duplicates`);
+      // Remove from publishing set when done (success or failure)
+      this.publishingPosts.delete(scheduledPost.id);
     }
   }
 
@@ -223,33 +226,30 @@ export class PostScheduler {
     }
 
     const now = Date.now();
-    console.log(`Checking ${this.scheduledPosts.length} scheduled posts for publishing...`);
+    console.log(`[PERIODIC_CHECK] Instance #${this.instanceId} checking ${this.scheduledPosts.length} scheduled posts for publishing...`);
 
-    // Find posts that should be published now (excluding those already being published globally or locally)
+    // Find posts that should be published now
     const postsToPublish = this.scheduledPosts.filter(post => {
       const publishTime = post.publishAt.getTime();
-      const isBeingPublished = this.publishingPosts.has(post.id) || globalPublishingPosts.has(post.id);
-      const shouldPublish = publishTime <= now && !isBeingPublished;
+      const shouldPublish = publishTime <= now;
       
-      if (publishTime <= now && isBeingPublished) {
-        console.log(`Post ${post.id} is ready but already being published (global: ${globalPublishingPosts.has(post.id)}, local: ${this.publishingPosts.has(post.id)}), skipping`);
-      } else if (shouldPublish) {
-        console.log(`Post ${post.id} is ready to publish (scheduled: ${post.publishAt.toISOString()}, now: ${new Date().toISOString()})`);
+      if (shouldPublish) {
+        console.log(`[PERIODIC_READY] Instance #${this.instanceId}: Post ${post.id} is ready to publish (scheduled: ${post.publishAt.toISOString()}, now: ${new Date().toISOString()})`);
       }
       
       return shouldPublish;
     });
 
-    // Publish each post that's ready
+    if (postsToPublish.length === 0) {
+      console.log(`[PERIODIC_NONE] Instance #${this.instanceId}: No posts ready to publish`);
+      return;
+    }
+
+    console.log(`[PERIODIC_PUBLISHING] Instance #${this.instanceId}: Publishing ${postsToPublish.length} posts`);
+
+    // Publish each post that's ready (publishPost will handle deduplication)
     for (const post of postsToPublish) {
-      // Clear any existing timer
-      const timer = this.timers.get(post.id);
-      if (timer) {
-        clearTimeout(timer);
-        this.timers.delete(post.id);
-      }
-      
-      // Publish the post (it will handle removal from scheduledPosts internally)
+      console.log(`[PERIODIC_PUBLISH] Instance #${this.instanceId}: Calling publishPost for ${post.id}`);
       await this.publishPost(post);
     }
   }
@@ -260,7 +260,7 @@ export class PostScheduler {
     this.scheduledPosts = [...scheduledPosts];
     
     console.log(`Updated scheduler with ${scheduledPosts.length} scheduled posts:`, 
-      scheduledPosts.map(p => ({ id: p.id, publishAt: p.publishAt.toISOString(), content: p.content.substring(0, 50) + '...' }))
+      scheduledPosts.map(p => ({ id: p.id, publishAt: p.publishAt.toISOString(), content: p.content.substring(0, 50) + '...', images: p.images?.length || 0 }))
     );
     
     // Clear timers for posts that are no longer scheduled
@@ -273,28 +273,20 @@ export class PostScheduler {
       }
     }
     
-    // Schedule new/updated posts and handle overdue posts
+    // Schedule new/updated posts (don't handle overdue posts here to avoid double publishing)
     const now = Date.now();
     for (const post of scheduledPosts) {
       const publishTime = post.publishAt.getTime();
-      const timeUntilPublish = publishTime - now;
       
-      const isBeingPublished = this.publishingPosts.has(post.id) || globalPublishingPosts.has(post.id);
-      
-      if (publishTime <= now && !isBeingPublished) {
-        // Post is overdue and not already being published, publish immediately
-        console.log(`Post ${post.id} is overdue by ${Math.abs(timeUntilPublish)}ms, publishing immediately`);
-        this.publishPost(post);
-      } else if (publishTime > now) {
+      if (publishTime > now) {
         // Post is in the future, schedule it
+        const timeUntilPublish = publishTime - now;
         console.log(`Scheduling post ${post.id} to publish in ${timeUntilPublish}ms (${Math.round(timeUntilPublish / 1000)}s)`);
         this.schedulePost(post);
-      } else {
-        console.log(`Post ${post.id} is overdue but already being published (global: ${globalPublishingPosts.has(post.id)}, local: ${this.publishingPosts.has(post.id)}), skipping`);
       }
     }
     
-    // Also trigger an immediate check for posts to publish
+    // Let checkForPostsToPublish handle overdue posts to avoid double publishing
     this.checkForPostsToPublish();
   }
 
@@ -305,28 +297,61 @@ export class PostScheduler {
       scheduledPostsCount: this.scheduledPosts.length,
       activeTimersCount: this.timers.size,
       publishingPostsCount: this.publishingPosts.size,
-      publishingPosts: Array.from(this.publishingPosts),
+      publishingPostIds: Array.from(this.publishingPosts),
       scheduledPosts: this.scheduledPosts.map(p => ({
         id: p.id,
         publishAt: p.publishAt.toISOString(),
         timeUntilPublish: p.publishAt.getTime() - Date.now(),
-        content: p.content.substring(0, 50) + '...',
-        hasImages: !!(p.images && p.images.length > 0),
-        imageCount: p.images?.length || 0
+        content: p.content.substring(0, 50) + '...'
       }))
     };
   }
 }
 
-// Global scheduler instance
+// Global scheduler instance tracking
 let globalScheduler: PostScheduler | null = null;
+let schedulerInstanceCount = 0;
+
+// Global deduplication tracking
+const recentlyPublished = new Map<string, number>(); // postId -> timestamp
+const DUPLICATE_PREVENTION_WINDOW = 5000; // 5 seconds
+
+function isRecentlyPublished(postId: string): boolean {
+  const lastPublished = recentlyPublished.get(postId);
+  if (!lastPublished) return false;
+  
+  const now = Date.now();
+  const timeSinceLastPublish = now - lastPublished;
+  
+  if (timeSinceLastPublish < DUPLICATE_PREVENTION_WINDOW) {
+    console.log(`[GLOBAL_DUPLICATE] Post ${postId} was published ${timeSinceLastPublish}ms ago, blocking duplicate`);
+    return true;
+  }
+  
+  // Clean up old entries
+  if (timeSinceLastPublish > DUPLICATE_PREVENTION_WINDOW * 2) {
+    recentlyPublished.delete(postId);
+  }
+  
+  return false;
+}
+
+function markAsPublished(postId: string): void {
+  recentlyPublished.set(postId, Date.now());
+  console.log(`[GLOBAL_MARK] Marked post ${postId} as recently published`);
+}
 
 export function getScheduler(): PostScheduler | null {
   return globalScheduler;
 }
 
 export function setScheduler(scheduler: PostScheduler | null): void {
+  if (scheduler && globalScheduler && globalScheduler !== scheduler) {
+    console.warn('[SCHEDULER_WARNING] Replacing existing scheduler instance');
+    globalScheduler.stop();
+  }
   globalScheduler = scheduler;
+  console.log(`[SCHEDULER_SET] Scheduler instance set:`, scheduler ? 'active' : 'null');
 }
 
 // Debug function for troubleshooting

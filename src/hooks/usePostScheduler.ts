@@ -31,7 +31,7 @@ export function usePostScheduler() {
     await updateWrapperRef.current(data);
   }, []);
 
-  // Initialize scheduler when user logs in (only depend on user, not functions)
+  // Initialize scheduler when user logs in (only depend on user)
   useEffect(() => {
     if (!user) {
       // Stop and cleanup scheduler when user logs out
@@ -65,21 +65,16 @@ export function usePostScheduler() {
         setScheduler(null);
       }
     };
-  }, [user, publishEvent, updateWrapper]); // Functions are now stable
+  }, [user]); // Only depend on user, not on functions
 
   // Update scheduler with latest scheduled posts
   useEffect(() => {
-    if (!schedulerRef.current || !scheduledPosts.length) return;
+    if (!schedulerRef.current) return;
 
-    // Convert scheduled posts to scheduler format
+    // Convert scheduled posts to scheduler format - only include posts that are actually scheduled
     const schedulerPosts: ScheduledPostEvent[] = scheduledPosts
       .filter(post => post.status === 'scheduled')
       .map(post => {
-        console.log(`Converting scheduled post ${post.id} to scheduler format:`, {
-          id: post.id,
-          images: post.images,
-          imagesCount: post.images?.length || 0
-        });
         return {
           id: post.id,
           publishAt: post.publishAt,
@@ -87,10 +82,26 @@ export function usePostScheduler() {
           targetKind: post.targetKind,
           images: post.images,
           event: post.event,
+          title: post.title,
         };
       });
 
+    console.log(`[SCHEDULER_UPDATE] Updating scheduler with ${schedulerPosts.length} scheduled posts (filtered from ${scheduledPosts.length} total posts)`);
+    
+    // Log the statuses of all posts for debugging
+    const statusCounts = scheduledPosts.reduce((acc, post) => {
+      acc[post.status] = (acc[post.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.log(`[SCHEDULER_STATUS] Post status counts:`, statusCounts);
+
+    // Always update the scheduler, even with empty array to clear old posts
     schedulerRef.current.updateScheduledPosts(schedulerPosts);
+    
+    // Log individual scheduled posts for debugging
+    schedulerPosts.forEach(post => {
+      console.log(`[SCHEDULED_POST] ${post.id}: publishes at ${post.publishAt.toISOString()}, content length: ${post.content.length}`);
+    });
   }, [scheduledPosts]);
 
   return {

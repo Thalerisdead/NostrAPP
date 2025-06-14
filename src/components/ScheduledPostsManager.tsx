@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, CheckCircle, XCircle, AlertCircle, Eye, Trash2, Plus, Image } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -37,9 +37,14 @@ const statusConfig = {
 export function ScheduledPostsManager() {
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [previewPost, setPreviewPost] = useState<{ title: string; content: string; publishAt: Date; images?: string[] } | null>(null);
-  const { data: scheduledPosts = [], isLoading, error } = useScheduledPosts();
+  const { data: scheduledPosts = [], isLoading, error, refetch: refetchScheduledPosts } = useScheduledPosts();
   const { cancelScheduledPost, isCancelling } = useSchedulePost();
   const { isRunning: isSchedulerRunning } = useSchedulerStatus();
+
+  // Refetch scheduled posts when component mounts to ensure fresh data
+  useEffect(() => {
+    refetchScheduledPosts();
+  }, [refetchScheduledPosts]);
 
   const formatRelativeTime = (date: Date) => {
     const now = new Date();
@@ -63,9 +68,15 @@ export function ScheduledPostsManager() {
     return `in ${diffDays} day${diffDays !== 1 ? 's' : ''}`;
   };
 
-  const handleCancelPost = async (id: string) => {
+  const handleCancelPost = async (post: { id: string; title: string; publishAt: Date; targetKind: number; createdAt: Date }) => {
     try {
-      await cancelScheduledPost.mutateAsync(id);
+      await cancelScheduledPost.mutateAsync({
+        id: post.id,
+        title: post.title,
+        publishAt: post.publishAt,
+        targetKind: post.targetKind,
+        createdAt: post.createdAt,
+      });
     } catch (error) {
       console.error('Failed to cancel post:', error);
     }
@@ -250,7 +261,7 @@ export function ScheduledPostsManager() {
                             <AlertDialogFooter>
                               <AlertDialogCancel>Keep Scheduled</AlertDialogCancel>
                               <AlertDialogAction
-                                onClick={() => handleCancelPost(post.id)}
+                                onClick={() => handleCancelPost(post)}
                                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                               >
                                 Cancel Post

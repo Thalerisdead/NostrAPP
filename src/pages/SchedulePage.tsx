@@ -1,6 +1,7 @@
 import React from 'react';
 import { ScheduledPostsManager } from '@/components/ScheduledPostsManager';
 import { SchedulerDebugPanel } from '@/components/SchedulerDebugPanel';
+import { PageHeader } from '@/components/PageHeader';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePostScheduler } from '@/hooks/usePostScheduler';
 import { LoginArea } from '@/components/auth/LoginArea';
@@ -14,14 +15,17 @@ export function SchedulePage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        <div className="container mx-auto px-4 py-16">
+      <div>
+        <PageHeader 
+          title="Schedule Posts" 
+          description="Schedule your Nostr posts and track their performance"
+          breadcrumbs={[
+            { label: 'Home', href: '/' },
+            { label: 'Schedule Posts' }
+          ]}
+        />
+        <div className="container mx-auto px-4 py-8">
           <div className="max-w-2xl mx-auto text-center">
-            <h1 className="text-4xl font-bold mb-4">Schedule Posts</h1>
-            <p className="text-lg text-muted-foreground mb-8">
-              Schedule your Nostr posts and track their performance
-            </p>
-            
             <Card className="border-dashed">
               <CardContent className="py-12 px-8 text-center">
                 <p className="text-muted-foreground mb-6">
@@ -37,7 +41,15 @@ export function SchedulePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div>
+      <PageHeader 
+        title="Schedule Posts" 
+        description="Manage your scheduled posts and track their performance"
+        breadcrumbs={[
+          { label: 'Home', href: '/' },
+          { label: 'Schedule Posts' }
+        ]}
+      />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto space-y-6">
           <SchedulerDebugPanel />

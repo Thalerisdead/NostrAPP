@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
+import { useNostr } from '@nostrify/react';
 import { toast } from './useToast';
 
 export interface CreateScheduledPostData {
@@ -20,11 +21,13 @@ export interface UpdateScheduledPostData {
   publishAt?: Date;
   targetKind?: number;
   createdAt?: Date;
+  title?: string;
 }
 
 export function useSchedulePost() {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { nostr } = useNostr();
   const queryClient = useQueryClient();
 
   const createScheduledPost = useMutation({
@@ -92,6 +95,27 @@ export function useSchedulePost() {
         throw new Error('User not logged in');
       }
 
+      // If no title is provided, fetch the current event to get the existing title
+      let finalTitle = data.title;
+      if (!finalTitle) {
+        const existingEvents = await nostr.query(
+          [{ 
+            kinds: [30401], 
+            authors: [user.pubkey],
+            '#d': [data.id]
+          }],
+          { signal: AbortSignal.timeout(5000) }
+        );
+
+        if (existingEvents.length > 0) {
+          const existingEvent = existingEvents[0];
+          const existingTitleTag = existingEvent.tags.find(([name]) => name === 'title')?.[1];
+          if (existingTitleTag) {
+            finalTitle = existingTitleTag;
+          }
+        }
+      }
+
       // Create tags for the update - include all required metadata
       const tags: string[][] = [
         ['d', data.id],
@@ -117,6 +141,11 @@ export function useSchedulePost() {
 
       if (data.error) {
         tags.push(['error', data.error]);
+      }
+
+      // Always include title if we have one
+      if (finalTitle) {
+        tags.push(['title', finalTitle]);
       }
 
       // Update the scheduled post status
@@ -154,10 +183,14 @@ export function useSchedulePost() {
   });
 
   const cancelScheduledPost = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (data: { id: string; title?: string; publishAt?: Date; targetKind?: number; createdAt?: Date }) => {
       return updateScheduledPost.mutateAsync({
-        id,
+        id: data.id,
         status: 'cancelled',
+        title: data.title,
+        publishAt: data.publishAt,
+        targetKind: data.targetKind,
+        createdAt: data.createdAt,
       });
     },
   });
