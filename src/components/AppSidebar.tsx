@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Calendar, Home, Settings, User, Sparkles, BarChart3 } from 'lucide-react';
+import { Calendar, Home, Settings, User, Sparkles, BarChart3, Target } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -26,6 +26,11 @@ const navigationItems = [
     title: 'Schedule Posts',
     url: '/schedule',
     icon: Calendar,
+  },
+  {
+    title: 'Campaigns',
+    url: '/campaigns',
+    icon: Target,
   },
   {
     title: 'Analytics',

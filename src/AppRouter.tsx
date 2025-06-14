@@ -5,6 +5,7 @@ import { AppLayout } from "./components/AppLayout";
 import Index from "./pages/Index";
 import { SchedulePage } from "./pages/SchedulePage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
+import { CampaignsPage } from "./pages/CampaignsPage";
 import NotFound from "./pages/NotFound";
 
 export function AppRouter() {
@@ -15,6 +16,7 @@ export function AppRouter() {
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

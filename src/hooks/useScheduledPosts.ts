@@ -1,7 +1,9 @@
 import { useNostr } from '@nostrify/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useCurrentUser } from './useCurrentUser';
+import { useMemo } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
+import type { CampaignPostDraft } from '@/types/campaign';
 
 export interface ScheduledPost {
   id: string;
@@ -14,6 +16,7 @@ export interface ScheduledPost {
   publishedEventId?: string;
   error?: string;
   images?: string[];
+  campaignId?: string;
   event: NostrEvent;
 }
 
@@ -73,6 +76,7 @@ export function useScheduledPosts() {
           const publishedEventIdTag = event.tags.find(([name]) => name === 'published_event')?.[1];
           const errorTag = event.tags.find(([name]) => name === 'error')?.[1];
           const titleTag = event.tags.find(([name]) => name === 'title')?.[1];
+          const campaignIdTag = event.tags.find(([name]) => name === 'campaign_id')?.[1];
           const imageTags = event.tags.filter(([name]) => name === 'image').map(([, url]) => url);
 
           if (!dTag || !publishAtTag || !statusTag || !targetKindTag || !createdAtTag) {
@@ -130,6 +134,7 @@ export function useScheduledPosts() {
             publishedEventId: publishedEventIdTag,
             error: errorTag,
             images: imageTags.length > 0 ? imageTags : undefined,
+            campaignId: campaignIdTag,
             event,
           });
 
@@ -147,5 +152,168 @@ export function useScheduledPosts() {
     retry: 3,
     refetchInterval: 10000, // Refetch every 10 seconds to keep UI in sync
     refetchIntervalInBackground: true, // Keep refreshing even when tab is in background
+  });
+}
+
+export function useCampaignPosts(campaignId?: string) {
+  const { data: allPosts, ...rest } = useScheduledPosts();
+  
+  const campaignPosts = useMemo(() => {
+    if (!campaignId || !allPosts) return [];
+    return allPosts.filter(post => post.campaignId === campaignId);
+  }, [allPosts, campaignId]);
+
+  return {
+    data: campaignPosts,
+    ...rest,
+  };
+}
+
+export function useDeleteScheduledPost() {
+  const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (post: ScheduledPost) => {
+      if (!user?.signer) {
+        throw new Error('User must be logged in to delete scheduled posts');
+      }
+
+      // For addressable events (kind 30401), we update the status to 'cancelled'
+      // This effectively "deletes" the post by marking it as cancelled
+      const tags = [
+        ['d', post.id],
+        ['title', post.title],
+        ['publish_at', Math.floor(post.publishAt.getTime() / 1000).toString()],
+        ['status', 'cancelled'],
+        ['target_kind', post.targetKind.toString()],
+        ['created_at', Math.floor(post.createdAt.getTime() / 1000).toString()],
+      ];
+
+      if (post.campaignId) {
+        tags.push(['campaign_id', post.campaignId]);
+      }
+
+      if (post.images && post.images.length > 0) {
+        post.images.forEach(imageUrl => {
+          tags.push(['image', imageUrl]);
+        });
+      }
+
+      // Encrypt the original content (keep it for potential recovery)
+      const encryptedContent = await user.signer.nip44!.encrypt(
+        user.pubkey,
+        post.content
+      );
+
+      const cancelEvent = await user.signer.signEvent({
+        kind: 30401,
+        content: encryptedContent,
+        tags,
+        created_at: Math.floor(Date.now() / 1000),
+      });
+
+      await nostr.event(cancelEvent);
+      return post.id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scheduled-posts'] });
+    },
+  });
+}
+
+export function useCreateScheduledPostsFromCampaign() {
+  const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      campaignId, 
+      posts, 
+      startDate, 
+      endDate 
+    }: { 
+      campaignId: string;
+      posts: CampaignPostDraft[];
+      startDate: Date;
+      endDate: Date;
+    }) => {
+      if (!user?.signer) {
+        throw new Error('User must be logged in to create scheduled posts');
+      }
+
+      if (posts.length === 0) {
+        return [];
+      }
+
+      // Calculate publish times - use custom time if set, otherwise distribute evenly
+      const timeSpan = endDate.getTime() - startDate.getTime();
+      const interval = timeSpan / posts.length;
+
+      const scheduledPosts: ScheduledPost[] = [];
+
+      for (let i = 0; i < posts.length; i++) {
+        const post = posts[i];
+        // Use custom publish time if set, otherwise auto-schedule
+        const publishAt = post.publishAt || new Date(startDate.getTime() + (interval * i));
+
+        const scheduledPostData = {
+          id: `scheduled-${Date.now()}-${i}`,
+          title: post.title,
+          content: post.content,
+          publishAt,
+          status: 'scheduled' as const,
+          createdAt: new Date(),
+          targetKind: 1,
+          images: post.images,
+          campaignId,
+        };
+
+        // Encrypt the post content
+        const encryptedContent = await user.signer.nip44!.encrypt(
+          user.pubkey,
+          scheduledPostData.content
+        );
+
+        const tags = [
+          ['d', scheduledPostData.id],
+          ['title', scheduledPostData.title],
+          ['publish_at', Math.floor(publishAt.getTime() / 1000).toString()],
+          ['status', scheduledPostData.status],
+          ['target_kind', scheduledPostData.targetKind.toString()],
+          ['created_at', Math.floor(scheduledPostData.createdAt.getTime() / 1000).toString()],
+          ['campaign_id', campaignId],
+        ];
+
+        if (scheduledPostData.images && scheduledPostData.images.length > 0) {
+          scheduledPostData.images.forEach(imageUrl => {
+            tags.push(['image', imageUrl]);
+          });
+        }
+
+        const event = await user.signer.signEvent({
+          kind: 30401,
+          content: encryptedContent,
+          tags,
+          created_at: Math.floor(Date.now() / 1000),
+        });
+
+        await nostr.event(event);
+        
+        const scheduledPost: ScheduledPost = {
+          ...scheduledPostData,
+          event,
+        };
+        
+        scheduledPosts.push(scheduledPost);
+      }
+
+      return scheduledPosts;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scheduled-posts'] });
+    },
   });
 } 

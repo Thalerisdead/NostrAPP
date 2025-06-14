@@ -103,6 +103,7 @@ interface ScheduledPost {
   images?: string[];
   publishedEventId?: string;
   error?: string;
+  campaignId?: string;
 }
 
 interface ScheduledPostsTableProps {
@@ -141,6 +142,7 @@ const statusConfig = {
 export function ScheduledPostsTable({ posts, onCancelPost, isCancelling, onSchedulePost }: ScheduledPostsTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [campaignFilter, setCampaignFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('publishAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [previewPost, setPreviewPost] = useState<ScheduledPost | null>(null);
@@ -202,12 +204,13 @@ export function ScheduledPostsTable({ posts, onCancelPost, isCancelling, onSched
     setAppliedPublishDateTo('');
   };
 
-  const hasActiveFilters = searchTerm || statusFilter !== 'all' || appliedPublishDateFrom || appliedPublishDateTo;
+  const hasActiveFilters = searchTerm || statusFilter !== 'all' || campaignFilter !== 'all' || appliedPublishDateFrom || appliedPublishDateTo;
   const hasUnappliedDateChanges = tempPublishDateFrom !== appliedPublishDateFrom || tempPublishDateTo !== appliedPublishDateTo;
 
   const clearAllFilters = () => {
     setSearchTerm('');
     setStatusFilter('all');
+    setCampaignFilter('all');
     clearDateFilters();
   };
 
@@ -225,6 +228,15 @@ export function ScheduledPostsTable({ posts, onCancelPost, isCancelling, onSched
     // Apply status filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(post => post.status === statusFilter);
+    }
+
+    // Apply campaign filter
+    if (campaignFilter !== 'all') {
+      if (campaignFilter === 'campaign') {
+        filtered = filtered.filter(post => post.campaignId);
+      } else if (campaignFilter === 'standalone') {
+        filtered = filtered.filter(post => !post.campaignId);
+      }
     }
 
     // Apply publish date filters (only applied ones)
@@ -275,7 +287,7 @@ export function ScheduledPostsTable({ posts, onCancelPost, isCancelling, onSched
     });
 
     return filtered;
-  }, [posts, searchTerm, statusFilter, appliedPublishDateFrom, appliedPublishDateTo, sortField, sortDirection]);
+  }, [posts, searchTerm, statusFilter, campaignFilter, appliedPublishDateFrom, appliedPublishDateTo, sortField, sortDirection]);
 
   const statusCounts = useMemo(() => {
     return posts.reduce((acc, post) => {
@@ -324,6 +336,18 @@ export function ScheduledPostsTable({ posts, onCancelPost, isCancelling, onSched
                   <SelectItem value="published">Published ({statusCounts.published || 0})</SelectItem>
                   <SelectItem value="failed">Failed ({statusCounts.failed || 0})</SelectItem>
                   <SelectItem value="cancelled">Cancelled ({statusCounts.cancelled || 0})</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={campaignFilter} onValueChange={setCampaignFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Filter by campaign" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Posts</SelectItem>
+                  <SelectItem value="campaign">Campaign Posts</SelectItem>
+                  <SelectItem value="standalone">Standalone Posts</SelectItem>
                 </SelectContent>
               </Select>
               
@@ -481,6 +505,9 @@ export function ScheduledPostsTable({ posts, onCancelPost, isCancelling, onSched
                         Title {getSortIcon('title')}
                       </Button>
                     </TableHead>
+                    <TableHead className="w-[150px]">
+                      <span className="font-semibold">Campaign</span>
+                    </TableHead>
                     <TableHead>
                       <Button
                         variant="ghost"
@@ -559,6 +586,16 @@ export function ScheduledPostsTable({ posts, onCancelPost, isCancelling, onSched
                               </div>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {post.campaignId ? (
+                            <Badge variant="outline" className="text-xs">
+                              <Calendar className="h-3 w-3 mr-1" />
+                              Campaign
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">

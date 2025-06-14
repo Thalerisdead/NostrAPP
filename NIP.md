@@ -1,12 +1,12 @@
-# NIP-X: Scheduled Posts
+# NIP-X: Scheduled Posts and Campaigns
 
 ## Abstract
 
-This NIP defines a standard for creating and managing scheduled posts on Nostr. It introduces a new event kind for storing encrypted scheduled posts that can be automatically published at a specified time.
+This NIP defines a standard for creating and managing scheduled posts and marketing campaigns on Nostr. It introduces event kinds for storing encrypted scheduled posts that can be automatically published at a specified time, and for organizing posts into coordinated campaigns.
 
 ## Motivation
 
-Social media scheduling is a common requirement for content creators and marketers. This NIP provides a decentralized way to schedule posts on Nostr without relying on centralized services.
+Social media scheduling and campaign management are common requirements for content creators and marketers. This NIP provides a decentralized way to schedule posts and organize them into campaigns on Nostr without relying on centralized services.
 
 ## Event Kinds
 
@@ -44,6 +44,57 @@ A scheduled post is an addressable event that contains encrypted content to be p
 - `published_event` (optional): Event ID of the published post (added when status becomes "published")
 - `error` (optional): Error message if the post failed to publish
 - `client` (optional): Client application that created the scheduled post
+- `campaign` (optional): Campaign ID this post belongs to
+
+### Kind 30402: Campaign
+
+A campaign is an addressable event that defines a marketing campaign containing multiple related posts.
+
+```json
+{
+  "kind": 30402,
+  "content": "",
+  "tags": [
+    ["d", "<unique-identifier>"],
+    ["title", "Book Launch Campaign"],
+    ["description", "A series of posts promoting my new book"],
+    ["start", "<unix-timestamp>"],
+    ["end", "<unix-timestamp>"],
+    ["status", "scheduled"],
+    ["total_posts", "10"],
+    ["completed_posts", "3"],
+    ["audience", "Developers and Bitcoin enthusiasts"],
+    ["t", "book-launch"],
+    ["t", "nostr"],
+    ["post", "<scheduled-post-id-1>"],
+    ["post", "<scheduled-post-id-2>"],
+    ["client", "nostr-social"]
+  ]
+}
+```
+
+#### Campaign Tags
+
+- `d` (required): Unique identifier for this campaign
+- `title` (required): Campaign title
+- `description` (optional): Campaign description
+- `start` (required): Unix timestamp when the campaign starts
+- `end` (required): Unix timestamp when the campaign ends
+- `status` (required): Current status - `draft`, `scheduled`, `active`, `completed`, `cancelled`
+- `total_posts` (required): Target number of posts in the campaign
+- `completed_posts` (required): Number of posts already published
+- `audience` (optional): Target audience description
+- `t` (optional): Campaign tags for categorization (can have multiple)
+- `post` (optional): Reference to scheduled posts in this campaign (can have multiple)
+- `client` (optional): Client application that created the campaign
+
+#### Campaign Status Lifecycle
+
+- `draft`: Campaign is being planned
+- `scheduled`: Campaign is ready and waiting for start date
+- `active`: Campaign is currently running
+- `completed`: Campaign has finished
+- `cancelled`: Campaign was cancelled
 
 ### Content Encryption
 
@@ -122,4 +173,29 @@ Scheduled posts can be updated by publishing a new kind 30401 event with the sam
     ["client", "nostr-social"]
   ]
 }
-``` 
+```
+
+### Creating a Campaign
+
+```json
+{
+  "kind": 30402,
+  "pubkey": "author-pubkey",
+  "created_at": 1234567890,
+  "content": "",
+  "tags": [
+    ["d", "book-launch-2024"],
+    ["title", "Nostr for Beginners Book Launch"],
+    ["description", "A 2-week campaign to promote my new book about Nostr"],
+    ["start", "1705308000"],
+    ["end", "1706517600"],
+    ["status", "scheduled"],
+    ["total_posts", "10"],
+    ["completed_posts", "0"],
+    ["audience", "Developers, Bitcoin enthusiasts, Content creators"],
+    ["t", "book-launch"],
+    ["t", "nostr"],
+    ["t", "education"],
+    ["client", "nostr-social"]
+  ]
+} 
