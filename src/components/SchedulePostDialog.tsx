@@ -170,8 +170,8 @@ export function SchedulePostDialog({ isOpen, onClose }: SchedulePostDialogProps)
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
             Schedule Post
@@ -181,154 +181,163 @@ export function SchedulePostDialog({ isOpen, onClose }: SchedulePostDialogProps)
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="title">Post Title</Label>
-            <Input
-              id="title"
-              placeholder="Give your post a title for organization"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-            <p className="text-sm text-muted-foreground">
-              This title is for your organization only and won't be published
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="content">Post Content</Label>
-            <Textarea
-              id="content"
-              placeholder="What's on your mind?"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={6}
-              className="resize-y min-h-[120px]"
-            />
-            <p className="text-sm text-muted-foreground">
-              {content.length} characters • No limit
-            </p>
-          </div>
-
-          {/* Image Upload Section */}
-          <div className="space-y-2">
-            <Label>Images</Label>
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                  id="image-upload"
-                  disabled={isUploadingImage}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => document.getElementById('image-upload')?.click()}
-                  disabled={isUploadingImage}
-                  className="flex items-center gap-2"
-                >
-                  <Image className="h-4 w-4" />
-                  {isUploadingImage ? 'Uploading...' : 'Add Image'}
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  Max 10MB • JPG, PNG, GIF, WebP
-                </span>
-              </div>
-
-              {/* Image Preview */}
-              {images.length > 0 && (
-                <div className="grid grid-cols-2 gap-3">
-                  {images.map((imageUrl, index) => (
-                    <div key={index} className="relative group">
-                      <img
-                        src={imageUrl}
-                        alt={`Upload ${index + 1}`}
-                        className="w-full h-24 object-cover rounded-lg border"
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => removeImage(index)}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="title">Post Title</Label>
+              <Input
+                id="title"
+                placeholder="Give your post a title for organization"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              <p className="text-sm text-muted-foreground">
+                This title is for your organization only and won't be published
+              </p>
             </div>
-          </div>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Schedule</CardTitle>
-              <CardDescription>
-                Choose when to publish your post
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="date">
-                    <Calendar className="h-4 w-4 inline mr-1" />
-                    Date
-                  </Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={publishDate}
-                    onChange={(e) => setPublishDate(e.target.value)}
-                    min={getMinDateTime()}
+            <div className="space-y-2">
+              <Label htmlFor="content">Post Content</Label>
+              <Textarea
+                id="content"
+                placeholder="What's on your mind?"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                rows={6}
+                className="resize-y min-h-[120px]"
+              />
+              <p className="text-sm text-muted-foreground">
+                {content.length} characters • No limit
+              </p>
+            </div>
+
+            {/* Image Upload Section */}
+            <div className="space-y-2">
+              <Label>Images</Label>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    id="image-upload"
+                    disabled={isUploadingImage}
                   />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById('image-upload')?.click()}
+                    disabled={isUploadingImage}
+                    className="flex items-center gap-2"
+                  >
+                    <Image className="h-4 w-4" />
+                    {isUploadingImage ? 'Uploading...' : 'Add Image'}
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Max 10MB • JPG, PNG, GIF, WebP
+                  </span>
                 </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="time">
-                    <Clock className="h-4 w-4 inline mr-1" />
-                    Time
-                  </Label>
-                  <Input
-                    id="time"
-                    type="time"
-                    value={publishTime}
-                    onChange={(e) => setPublishTime(e.target.value)}
-                    min={getMinTime()}
-                  />
-                </div>
+
+                {/* Image Preview */}
+                {images.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {images.map((imageUrl, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={imageUrl}
+                          alt={`Upload ${index + 1}`}
+                          className="w-full h-24 object-cover rounded-lg border"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => removeImage(index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+            </div>
 
-              {publishDate && publishTime && (
-                <div className="p-3 bg-muted rounded-lg">
-                  <p className="text-sm">
-                    <strong>Will publish:</strong>{' '}
-                    {new Date(`${publishDate}T${publishTime}`).toLocaleString()}
-                  </p>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Schedule</CardTitle>
+                <CardDescription>
+                  Choose when to publish your post
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="date">
+                      <Calendar className="h-4 w-4 inline mr-1" />
+                      Date
+                    </Label>
+                    <Input
+                      id="date"
+                      type="date"
+                      value={publishDate}
+                      onChange={(e) => setPublishDate(e.target.value)}
+                      min={getMinDateTime()}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="time">
+                      <Clock className="h-4 w-4 inline mr-1" />
+                      Time
+                    </Label>
+                    <Input
+                      id="time"
+                      type="time"
+                      value={publishTime}
+                      onChange={(e) => setPublishTime(e.target.value)}
+                      min={getMinTime()}
+                    />
+                  </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
 
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isCreating}>
-              {isCreating ? (
-                'Scheduling...'
-              ) : (
-                <>
-                  <Send className="h-4 w-4 mr-2" />
-                  Schedule Post
-                </>
-              )}
-            </Button>
-          </div>
-        </form>
+                {publishDate && publishTime && (
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-sm">
+                      <strong>Will publish:</strong>{' '}
+                      {new Date(`${publishDate}T${publishTime}`).toLocaleString()}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Add some bottom padding to ensure content doesn't get cut off */}
+            <div className="pb-4" />
+          </form>
+        </div>
+
+        <div className="flex justify-end gap-3 px-6 py-4 border-t bg-background shrink-0">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button 
+            type="submit" 
+            disabled={isCreating}
+            onClick={handleSubmit}
+          >
+            {isCreating ? (
+              'Scheduling...'
+            ) : (
+              <>
+                <Send className="h-4 w-4 mr-2" />
+                Schedule Post
+              </>
+            )}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

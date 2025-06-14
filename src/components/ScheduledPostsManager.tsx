@@ -10,6 +10,7 @@ import { useSchedulePost } from '@/hooks/useSchedulePost';
 import { useSchedulerStatus } from '@/hooks/usePostScheduler';
 import { SchedulePostDialog } from './SchedulePostDialog';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const statusConfig = {
   scheduled: {
@@ -285,41 +286,44 @@ export function ScheduledPostsManager() {
       />
 
       <Dialog open={!!previewPost} onOpenChange={() => setPreviewPost(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle>{previewPost?.title || 'Post Preview'}</DialogTitle>
             <DialogDescription>
               {previewPost && `Scheduled for ${previewPost.publishAt.toLocaleString()}`}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="p-4 bg-muted rounded-lg">
-              <p className="whitespace-pre-wrap">{previewPost?.content}</p>
-            </div>
-            
-            {previewPost?.images && previewPost.images.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="font-medium text-sm flex items-center gap-2">
-                  <Image className="h-4 w-4" />
-                  Images ({previewPost.images.length})
-                </h4>
-                <div className="grid grid-cols-2 gap-3">
-                  {previewPost.images.map((imageUrl, index) => (
-                    <img
-                      key={index}
-                      src={imageUrl}
-                      alt={`Image ${index + 1}`}
-                      className="w-full h-32 object-cover rounded-lg border"
-                      onError={(e) => {
-                        console.error('Failed to load image:', imageUrl);
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  ))}
-                </div>
+          
+          <ScrollArea className="flex-1 px-6 py-4">
+            <div className="space-y-4">
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="whitespace-pre-wrap">{previewPost?.content}</p>
               </div>
-            )}
-          </div>
+              
+              {previewPost?.images && previewPost.images.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm flex items-center gap-2">
+                    <Image className="h-4 w-4" />
+                    Images ({previewPost.images.length})
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    {previewPost.images.map((imageUrl, index) => (
+                      <img
+                        key={index}
+                        src={imageUrl}
+                        alt={`Image ${index + 1}`}
+                        className="w-full h-32 object-cover rounded-lg border"
+                        onError={(e) => {
+                          console.error('Failed to load image:', imageUrl);
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
     </div>
