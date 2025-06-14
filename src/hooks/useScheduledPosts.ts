@@ -37,9 +37,33 @@ export function useScheduledPosts() {
         { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) }
       );
 
+      // Deduplicate events by d-tag, keeping only the latest event for each d-tag
+      // This is crucial for addressable events (kind 30401) where multiple events
+      // with the same d-tag can exist, but only the latest should be processed
+      const eventsByDTag = new Map<string, NostrEvent>();
+      
+      console.log(`[SCHEDULED_POSTS] Found ${events.length} raw events before deduplication`);
+      
+      for (const event of events) {
+        const dTag = event.tags.find(([name]) => name === 'd')?.[1];
+        if (!dTag) continue;
+        
+        const existing = eventsByDTag.get(dTag);
+        if (!existing || event.created_at > existing.created_at) {
+          if (existing) {
+            console.log(`[DEDUPLICATION] Replacing event for d-tag ${dTag}: old created_at=${existing.created_at}, new created_at=${event.created_at}`);
+          }
+          eventsByDTag.set(dTag, event);
+        } else {
+          console.log(`[DEDUPLICATION] Keeping existing event for d-tag ${dTag}: existing created_at=${existing.created_at}, ignored created_at=${event.created_at}`);
+        }
+      }
+      
+      console.log(`[SCHEDULED_POSTS] After deduplication: ${eventsByDTag.size} unique events`);
+
       const scheduledPosts: ScheduledPost[] = [];
 
-      for (const event of events) {
+      for (const event of eventsByDTag.values()) {
         try {
           const dTag = event.tags.find(([name]) => name === 'd')?.[1];
           const publishAtTag = event.tags.find(([name]) => name === 'publish_at')?.[1];

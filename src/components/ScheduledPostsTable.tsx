@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Calendar, Clock, CheckCircle, XCircle, AlertCircle, Eye, Trash2, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, Image, Plus, CalendarDays, X } from 'lucide-react';
+import { Calendar, Clock, CheckCircle, XCircle, AlertCircle, Eye, Trash2, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, Image, Plus, CalendarDays, X, Heart, Repeat2, MessageCircle, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,85 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { PostAnalytics } from '@/components/PostAnalytics';
+import { usePostAnalytics } from '@/hooks/usePostAnalytics';
+
+// Individual engagement cells component for table display
+function EngagementCells({ eventId, status }: { eventId?: string; status: string }) {
+  const { data: analytics, isLoading } = usePostAnalytics(eventId || '');
+
+  // For non-published posts, show placeholder cells
+  if (status !== 'published' || !eventId) {
+    const placeholderText = status === 'scheduled' ? '-' : 
+                           status === 'failed' ? '-' : '-';
+    
+    return (
+      <>
+        <TableCell className="text-center text-xs text-muted-foreground">
+          {placeholderText}
+        </TableCell>
+        <TableCell className="text-center text-xs text-muted-foreground">
+          {placeholderText}
+        </TableCell>
+        <TableCell className="text-center text-xs text-muted-foreground">
+          {placeholderText}
+        </TableCell>
+        <TableCell className="text-center text-xs text-muted-foreground">
+          {placeholderText}
+        </TableCell>
+      </>
+    );
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <>
+        <TableCell className="text-center">
+          <div className="animate-pulse bg-muted rounded w-6 h-4 mx-auto"></div>
+        </TableCell>
+        <TableCell className="text-center">
+          <div className="animate-pulse bg-muted rounded w-6 h-4 mx-auto"></div>
+        </TableCell>
+        <TableCell className="text-center">
+          <div className="animate-pulse bg-muted rounded w-6 h-4 mx-auto"></div>
+        </TableCell>
+        <TableCell className="text-center">
+          <div className="animate-pulse bg-muted rounded w-6 h-4 mx-auto"></div>
+        </TableCell>
+      </>
+    );
+  }
+
+  // No data
+  if (!analytics) {
+    return (
+      <>
+        <TableCell className="text-center text-xs text-muted-foreground">-</TableCell>
+        <TableCell className="text-center text-xs text-muted-foreground">-</TableCell>
+        <TableCell className="text-center text-xs text-muted-foreground">-</TableCell>
+        <TableCell className="text-center text-xs text-muted-foreground">-</TableCell>
+      </>
+    );
+  }
+
+  // Show actual metrics
+  return (
+    <>
+      <TableCell className="text-center text-sm font-medium text-red-600">
+        {analytics.likes}
+      </TableCell>
+      <TableCell className="text-center text-sm font-medium text-green-600">
+        {analytics.reposts}
+      </TableCell>
+      <TableCell className="text-center text-sm font-medium text-blue-600">
+        {analytics.comments}
+      </TableCell>
+      <TableCell className="text-center text-sm font-medium text-yellow-600">
+        {analytics.zaps.count}
+      </TableCell>
+    </>
+  );
+}
 
 interface ScheduledPost {
   id: string;
@@ -429,6 +508,30 @@ export function ScheduledPostsTable({ posts, onCancelPost, isCancelling, onSched
                         Created {getSortIcon('createdAt')}
                       </Button>
                     </TableHead>
+                    <TableHead className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Heart className="h-3 w-3 text-red-600" />
+                        <span className="font-semibold text-xs">Likes</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Repeat2 className="h-3 w-3 text-green-600" />
+                        <span className="font-semibold text-xs">Reposts</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <MessageCircle className="h-3 w-3 text-blue-600" />
+                        <span className="font-semibold text-xs">Comments</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Zap className="h-3 w-3 text-yellow-600" />
+                        <span className="font-semibold text-xs">Zaps</span>
+                      </div>
+                    </TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -490,6 +593,10 @@ export function ScheduledPostsTable({ posts, onCancelPost, isCancelling, onSched
                             {post.createdAt.toLocaleDateString()}
                           </div>
                         </TableCell>
+                        <EngagementCells 
+                          eventId={post.publishedEventId} 
+                          status={post.status} 
+                        />
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button
